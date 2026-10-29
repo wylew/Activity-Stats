@@ -1,13 +1,19 @@
 package com.wylew.activitystats.data
 
+import com.wylew.activitystats.data.healthconnect.HcStatus
+import com.wylew.activitystats.data.healthconnect.HealthConnectSource
 import com.wylew.activitystats.data.strava.NotConnectedException
 import com.wylew.activitystats.data.strava.StravaApi
 import com.wylew.activitystats.data.strava.StravaAuth
 import com.wylew.activitystats.domain.Activity
+import com.wylew.activitystats.domain.Dedupe
 import com.wylew.activitystats.domain.Source
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -18,55 +24,94 @@ sealed interface SyncResult {
     data class Failed(val message: String) : SyncResult
 }
 
+/**
+ * Pulls from every connected source and serves one de-duplicated list.
+ *
+ * Health Connect is the main source (Garmin Connect and Strava both write to it, for free).
+ * The Strava API is optional and only works with a Strava subscription.
+ */
 class ActivityRepository(
-    private val api: StravaApi,
-    private val auth: StravaAuth,
+    private val healthConnect: HealthConnectSource,
+    private val stravaApi: StravaApi,
+    private val stravaAuth: StravaAuth,
     private val store: ActivityStore,
     private val settings: SettingsStore,
 ) {
     private val syncLock = Mutex()
 
-    val activities: Flow<List<Activity>> = store.activities
+    /** Every activity once, newest first. */
+    val activities: Flow<List<Activity>> = store.activities.map { Dedupe.apply(it) }
+
+    suspend fun all(): List<Activity> = Dedupe.apply(store.all())
 
     /**
-     * Pulls new Strava activities.
-     *
-     * First run backfills from January 1 of last year (enough for year-over-year comparisons).
-     * After that it re-reads the last three days, so edits made just after upload (title,
-     * sport type, a cropped GPS track) are picked up.
+     * @param background true from WorkManager. Health Connect only allows background reads
+     *   when the user granted "Access data in the background", so we skip it otherwise.
      */
-    suspend fun sync(): SyncResult = syncLock.withLock {
-        syncInternal()
+    suspend fun sync(background: Boolean = false): SyncResult = syncLock.withLock {
+        val results = mutableListOf<SyncResult>()
+
+        if (healthConnect.status() == HcStatus.READY && (!background || healthConnect.canReadInBackground())) {
+            results += syncHealthConnect()
+        }
+        if (settings.tokens.first() != null) {
+            results += syncStrava()
+        }
+
+        val result = when {
+            results.isEmpty() -> SyncResult.NotConnected
+            results.all { it is SyncResult.Success } ->
+                SyncResult.Success(results.sumOf { (it as SyncResult.Success).fetched })
+            else -> results.first { it !is SyncResult.Success }
+        }
+        if (results.any { it is SyncResult.Success }) settings.setLastSync(System.currentTimeMillis())
+        result
     }
 
-    private suspend fun syncInternal(): SyncResult {
-        return try {
-            if (auth.validAccessToken() == null) throw NotConnectedException()
-            val newest = store.all().filter { it.source == Source.STRAVA }.maxOfOrNull { it.startEpochSec }
-            val after = newest?.minus(3 * 86_400) ?: backfillStartSec()
+    /**
+     * First run reads from January 1 of last year (Health Connect returns older data only with
+     * the history permission). After that it re-reads the last three days so late writes and
+     * edits from Garmin or Strava are picked up.
+     */
+    private suspend fun syncHealthConnect(): SyncResult = try {
+        val since = sinceFor(Source.HEALTH_CONNECT)
+        val fetched = healthConnect.readActivities(Instant.ofEpochSecond(since))
+        store.upsert(fetched)
+        SyncResult.Success(fetched.size)
+    } catch (e: SecurityException) {
+        SyncResult.Failed("Health Connect access was removed. Allow it again in Settings.")
+    } catch (e: Exception) {
+        SyncResult.Failed("Health Connect: ${e.message ?: e.javaClass.simpleName}")
+    }
 
-            val fetched = mutableListOf<Activity>()
-            var page = 1
-            while (page <= MAX_PAGES) {
-                val batch = api.athleteActivities(after, page)
-                fetched += batch.map { it.toDomain() }
-                if (batch.size < StravaApi.PER_PAGE) break
-                page++
-            }
-            store.upsert(fetched)
-            settings.setLastSync(System.currentTimeMillis())
-            SyncResult.Success(fetched.size)
-        } catch (e: NotConnectedException) {
-            SyncResult.NotConnected
-        } catch (e: RateLimitedException) {
-            SyncResult.RateLimited(e.retryAfterSec)
-        } catch (e: Exception) {
-            SyncResult.Failed(e.message ?: e.javaClass.simpleName)
+    private suspend fun syncStrava(): SyncResult = try {
+        if (stravaAuth.validAccessToken() == null) throw NotConnectedException()
+        val after = sinceFor(Source.STRAVA)
+        val fetched = mutableListOf<Activity>()
+        var page = 1
+        while (page <= MAX_STRAVA_PAGES) {
+            val batch = stravaApi.athleteActivities(after, page)
+            fetched += batch.map { it.toDomain() }
+            if (batch.size < StravaApi.PER_PAGE) break
+            page++
         }
+        store.upsert(fetched)
+        SyncResult.Success(fetched.size)
+    } catch (e: NotConnectedException) {
+        SyncResult.NotConnected
+    } catch (e: RateLimitedException) {
+        SyncResult.RateLimited(e.retryAfterSec)
+    } catch (e: Exception) {
+        SyncResult.Failed("Strava: ${e.message ?: e.javaClass.simpleName}")
+    }
+
+    private suspend fun sinceFor(source: Source): Long {
+        val newest = store.all().filter { it.source == source }.maxOfOrNull { it.startEpochSec }
+        return newest?.minus(3 * 86_400) ?: backfillStartSec()
     }
 
     suspend fun disconnectStrava() {
-        auth.disconnect()
+        stravaAuth.disconnect()
         store.clear(Source.STRAVA)
     }
 
@@ -75,7 +120,6 @@ class ActivityRepository(
             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
 
     private companion object {
-        /** 10 pages x 200 = 2,000 activities per sync, well under Strava's read limits. */
-        const val MAX_PAGES = 10
+        const val MAX_STRAVA_PAGES = 10
     }
 }

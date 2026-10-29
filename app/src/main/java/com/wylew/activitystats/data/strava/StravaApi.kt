@@ -76,6 +76,7 @@ data class StravaActivityDto(
             movingSec = movingTime,
             elevationM = totalElevationGain,
             avgHr = averageHeartrate,
+            origin = "Strava",
         )
     }
 }

@@ -52,4 +52,6 @@ data class Activity(
     val movingSec: Int,
     val elevationM: Double,
     val avgHr: Double? = null,
+    /** App that recorded it, e.g. "Garmin" or "Strava". */
+    val origin: String? = null,
 )

@@ -1,5 +1,6 @@
 package com.wylew.activitystats.ui.dashboard
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -46,8 +48,11 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.wylew.activitystats.data.healthconnect.HcStatus
 import com.wylew.activitystats.domain.Activity
 import com.wylew.activitystats.domain.ActivityFilter
 import com.wylew.activitystats.domain.Format
@@ -73,6 +78,15 @@ fun DashboardScreen(onOpenSettings: () -> Unit, vm: DashboardViewModel = viewMod
     val message by vm.message.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
+    val hcPermissionLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted -> vm.onHealthConnectResult(granted) }
+
+    LifecycleResumeEffect(Unit) {
+        vm.refreshSources()
+        onPauseOrDispose { }
+    }
+
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); vm.messageShown() }
     }
@@ -91,8 +105,15 @@ fun DashboardScreen(onOpenSettings: () -> Unit, vm: DashboardViewModel = viewMod
             item { PeriodPicker(state.period, vm::selectPeriod) }
             item { FilterRow(state.filter, vm::selectFilter) }
 
-            if (!state.connection.connected) {
-                item { ConnectCard(onConnect = vm::connect) }
+            if (!state.loading && !state.hasSource) {
+                item {
+                    SourcesCard(
+                        status = state.healthConnect,
+                        onAllow = { hcPermissionLauncher.launch(vm.healthConnectPermissions) },
+                        onInstall = vm::installHealthConnect,
+                        onStrava = vm::connectStrava,
+                    )
+                }
             }
 
             val r = state.rollup
@@ -137,7 +158,7 @@ private fun Header(state: DashboardState, syncing: Boolean, onSync: () -> Unit, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            FilledTonalIconButton(onClick = onSync, enabled = state.connection.connected && !syncing, modifier = Modifier.size(48.dp)) {
+            FilledTonalIconButton(onClick = onSync, enabled = state.hasSource && !syncing, modifier = Modifier.size(48.dp)) {
                 if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Filled.Refresh, contentDescription = "Sync now")
             }
@@ -174,15 +195,39 @@ private fun FilterRow(selected: ActivityFilter, onSelect: (ActivityFilter) -> Un
 }
 
 @Composable
-private fun ConnectCard(onConnect: () -> Unit) {
+private fun SourcesCard(status: HcStatus, onAllow: () -> Unit, onInstall: () -> Unit, onStrava: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Connect Strava", style = MaterialTheme.typography.titleLarge)
-            Text(
-                "Activity Stats reads your activities from Strava. Your data stays on this phone.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = onConnect) { Text("Connect Strava account") }
+            Text("Bring in your workouts", style = MaterialTheme.typography.titleLarge)
+            when (status) {
+                HcStatus.UNAVAILABLE -> {
+                    Text(
+                        "Health Connect isn't available on this phone. You can connect the Strava API instead (needs a Strava subscription).",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = onStrava) { Text("Connect Strava API") }
+                }
+                HcStatus.NEEDS_INSTALL -> {
+                    Text(
+                        "Activity Stats reads from Health Connect, Google's free on-phone hub for fitness data. Install it first.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = onInstall) { Text("Install Health Connect") }
+                }
+                HcStatus.NO_PERMISSION, HcStatus.READY -> {
+                    Text("1. In Garmin Connect: More → Settings → Health Connect, and allow sharing.", style = MaterialTheme.typography.bodyMedium)
+                    Text("2. In Strava: You → Settings → Manage Apps and Devices → Health Connect.", style = MaterialTheme.typography.bodyMedium)
+                    Text("3. Let Activity Stats read your workouts:", style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = onAllow) { Text("Allow Health Connect access") }
+                    Text(
+                        "Your data stays on this phone. Turn on background access so widgets update while the app is closed.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            if (status != HcStatus.UNAVAILABLE) {
+                TextButton(onClick = onStrava) { Text("Or use the Strava API (subscription required)") }
+            }
         }
     }
 }
@@ -323,7 +368,7 @@ private fun ActivityRow(a: Activity, units: Units, shape: Shape) {
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${Format.distance(a.distanceM, units)} ${Format.distanceUnit(units)}", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
-                Text(a.sportType, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                Text(listOfNotNull(a.sportType, a.origin).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
             }
         }
     }
@@ -335,7 +380,7 @@ private fun SyncFooter(state: DashboardState) {
     val t = Instant.ofEpochMilli(last).atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT))
     Text(
-        "Strava · last synced $t",
+        "Last synced $t",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

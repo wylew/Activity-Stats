@@ -5,6 +5,7 @@ import android.content.Context
 import com.wylew.activitystats.data.ActivityRepository
 import com.wylew.activitystats.data.ActivityStore
 import com.wylew.activitystats.data.SettingsStore
+import com.wylew.activitystats.data.healthconnect.HealthConnectSource
 import com.wylew.activitystats.data.strava.StravaApi
 import com.wylew.activitystats.data.strava.StravaAuth
 import com.wylew.activitystats.sync.SyncScheduler
@@ -37,8 +38,9 @@ class AppGraph(context: Context) {
     val settings = SettingsStore(context)
     val auth = StravaAuth(settings, http, json)
     val api = StravaApi(http, json, auth)
+    val healthConnect = HealthConnectSource(context)
     val store = ActivityStore(File(context.filesDir, "activities.json"), json)
-    val repository = ActivityRepository(api, auth, store, settings)
+    val repository = ActivityRepository(healthConnect, api, auth, store, settings)
 }
 
 val Context.graph: AppGraph get() = (applicationContext as ActivityStatsApp).graph

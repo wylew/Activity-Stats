@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wylew.activitystats.data.Connection
 import com.wylew.activitystats.data.SyncResult
+import com.wylew.activitystats.data.healthconnect.HcStatus
 import com.wylew.activitystats.domain.Activity
 import com.wylew.activitystats.domain.ActivityFilter
 import com.wylew.activitystats.domain.Rollup
@@ -27,6 +28,7 @@ import java.time.ZoneId
 data class DashboardState(
     val loading: Boolean = true,
     val connection: Connection = Connection(false, null, null),
+    val healthConnect: HcStatus = HcStatus.NO_PERMISSION,
     val units: Units = Units.IMPERIAL,
     val period: RollupPeriod = RollupPeriod.WEEKLY,
     val filter: ActivityFilter = ActivityFilter.RUN,
@@ -34,7 +36,10 @@ data class DashboardState(
     val previous: Rollup? = null,
     /** Default goal for the period, in meters. TODO: make editable in settings. */
     val goalM: Double = 0.0,
-)
+) {
+    /** At least one source can supply activities. */
+    val hasSource: Boolean get() = healthConnect == HcStatus.READY || connection.connected
+}
 
 private data class Selection(val period: RollupPeriod, val filter: ActivityFilter)
 
@@ -45,21 +50,48 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _syncing = MutableStateFlow(false)
     val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
+    private val hcStatus = MutableStateFlow(HcStatus.NO_PERMISSION)
+
+    /** Permissions to pass to Health Connect's request contract. */
+    val healthConnectPermissions: Set<String> get() = graph.healthConnect.permissions
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
     val state: StateFlow<DashboardState> = combine(
-        graph.store.activities,
+        graph.repository.activities,
         graph.settings.connection,
         graph.settings.units,
         selection,
-    ) { activities, connection, units, sel ->
-        build(activities, connection, units, sel)
+        hcStatus,
+    ) { activities, connection, units, sel, hc ->
+        build(activities, connection, units, sel).copy(healthConnect = hc)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardState())
 
     init {
         viewModelScope.launch {
-            if (graph.settings.connection.first().connected) sync()
+            refreshSourcesNow()
+            if (hcStatus.value == HcStatus.READY || graph.settings.connection.first().connected) sync()
+        }
+    }
+
+    /** Call on resume: the user may have changed access in Health Connect settings. */
+    fun refreshSources() {
+        viewModelScope.launch { refreshSourcesNow() }
+    }
+
+    private suspend fun refreshSourcesNow() {
+        hcStatus.value = graph.healthConnect.status()
+    }
+
+    /** After the Health Connect permission sheet closes. */
+    fun onHealthConnectResult(granted: Set<String>) {
+        viewModelScope.launch {
+            refreshSourcesNow()
+            when {
+                hcStatus.value == HcStatus.READY -> sync()
+                granted.isEmpty() -> _message.value = "Activity Stats needs exercise access to show your workouts."
+            }
         }
     }
 
@@ -67,7 +99,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun selectFilter(f: ActivityFilter) { selection.value = selection.value.copy(filter = f) }
     fun messageShown() { _message.value = null }
 
-    fun connect() {
+    fun installHealthConnect() {
+        getApplication<Application>().startActivity(graph.healthConnect.installIntent())
+    }
+
+    fun connectStrava() {
         if (!graph.auth.isConfigured) {
             _message.value = "Add strava.clientId and strava.clientSecret to local.properties, then rebuild."
             return
@@ -80,7 +116,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _syncing.value = true
             when (val r = graph.repository.sync()) {
-                is SyncResult.Success -> if (r.fetched > 0) _message.value = "Synced ${r.fetched} from Strava"
+                is SyncResult.Success -> Unit
                 SyncResult.NotConnected -> Unit
                 is SyncResult.RateLimited -> _message.value = "Strava rate limit hit. Try again in ~15 minutes."
                 is SyncResult.Failed -> _message.value = "Sync failed: ${r.message}"

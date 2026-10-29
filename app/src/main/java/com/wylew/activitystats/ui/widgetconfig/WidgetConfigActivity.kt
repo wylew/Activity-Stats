@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,7 +18,9 @@ import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.lifecycle.lifecycleScope
+import com.wylew.activitystats.MainActivity
 import com.wylew.activitystats.data.Connection
+import com.wylew.activitystats.data.healthconnect.HcStatus
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.graph
 import com.wylew.activitystats.ui.theme.ActivityStatsTheme
@@ -46,9 +49,10 @@ class WidgetConfigActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ActivityStatsTheme {
-                val activities by graph.store.activities.collectAsState(emptyList())
+                val activities by graph.repository.activities.collectAsState(emptyList())
                 val units by graph.settings.units.collectAsState(Units.IMPERIAL)
                 val connection by graph.settings.connection.collectAsState(Connection(false, null, null))
+                val hcReady by produceState(false) { value = graph.healthConnect.status() == HcStatus.READY }
                 var initial by remember { mutableStateOf<WidgetSettings?>(null) }
 
                 LaunchedEffect(glanceId) {
@@ -61,8 +65,8 @@ class WidgetConfigActivity : ComponentActivity() {
                         initial = start,
                         activities = activities,
                         units = units,
-                        connected = connection.connected,
-                        onConnect = { graph.auth.launchAuthorize(this@WidgetConfigActivity) },
+                        connected = hcReady || connection.connected,
+                        onConnect = { startActivity(Intent(this@WidgetConfigActivity, MainActivity::class.java)) },
                         onClose = { finish() },
                         onSave = { chosen ->
                             lifecycleScope.launch {

@@ -107,11 +107,11 @@ fun WidgetConfigScreen(
             if (!connected) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Connect Strava to fill this widget with your activities.",
+                        "Connect Health Connect in Activity Stats to fill this widget with your workouts. You can save it now; it fills in after the first sync.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    FilledTonalButton(onClick = onConnect) { Text("Connect Strava") }
+                    FilledTonalButton(onClick = onConnect) { Text("Open Activity Stats") }
                 }
             }
 

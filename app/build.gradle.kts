@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.browser)
+    implementation(libs.androidx.health.connect)
 
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)

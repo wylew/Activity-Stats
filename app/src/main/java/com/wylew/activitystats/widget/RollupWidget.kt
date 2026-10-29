@@ -72,11 +72,11 @@ class RollupWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val graph = context.graph
-        val initialActivities = graph.store.all()
+        val initialActivities = graph.repository.all()
         val initialUnits = graph.settings.units.first()
 
         provideContent {
-            val activities by graph.store.activities.collectAsState(initialActivities)
+            val activities by graph.repository.activities.collectAsState(initialActivities)
             val units by graph.settings.units.collectAsState(initialUnits)
             val settings = WidgetPrefs.read(currentState<Preferences>())
             val rollup = RollupCalculator.compute(
