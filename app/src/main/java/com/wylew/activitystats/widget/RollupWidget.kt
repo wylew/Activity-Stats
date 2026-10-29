@@ -22,6 +22,8 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
+import androidx.glance.color.ColorProviders
+import androidx.glance.material3.ColorProviders as glanceColorProviders
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -45,6 +47,10 @@ import com.wylew.activitystats.domain.Rollup
 import com.wylew.activitystats.domain.RollupCalculator
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.graph
+import com.wylew.activitystats.theme.ColorSource
+import com.wylew.activitystats.theme.ThemeMode
+import com.wylew.activitystats.theme.ThemeSettings
+import com.wylew.activitystats.ui.theme.colorSchemeFor
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.LocalDate
@@ -74,16 +80,21 @@ class RollupWidget : GlanceAppWidget() {
         val graph = context.graph
         val initialActivities = graph.repository.all()
         val initialUnits = graph.settings.units.first()
+        val initialTheme = graph.settings.theme.first()
 
         provideContent {
             val activities by graph.repository.activities.collectAsState(initialActivities)
             val units by graph.settings.units.collectAsState(initialUnits)
+            val theme by graph.settings.theme.collectAsState(initialTheme)
             val settings = WidgetPrefs.read(currentState<Preferences>())
             val rollup = RollupCalculator.compute(
                 activities, settings.filter, settings.period.rollup, LocalDate.now(), ZoneId.systemDefault()
             )
-            GlanceTheme {
-                WidgetContent(rollup, settings, units)
+            val colors = glanceColors(context, theme)
+            if (colors == null) {
+                GlanceTheme { WidgetContent(rollup, settings, units) }
+            } else {
+                GlanceTheme(colors = colors) { WidgetContent(rollup, settings, units) }
             }
         }
     }
@@ -91,6 +102,21 @@ class RollupWidget : GlanceAppWidget() {
     companion object {
         val SMALL = DpSize(110.dp, 110.dp)
         val WIDE = DpSize(250.dp, 110.dp)
+    }
+}
+
+/**
+ * Null means "use Glance's default", which is the wallpaper palette following system light/dark.
+ * Otherwise we hand Glance explicit light and dark schemes; forcing a mode passes the same one twice.
+ */
+private fun glanceColors(context: Context, t: ThemeSettings): ColorProviders? {
+    if (t.source == ColorSource.WALLPAPER && t.mode == ThemeMode.SYSTEM) return null
+    val light = colorSchemeFor(context, t, dark = false)
+    val dark = colorSchemeFor(context, t, dark = true)
+    return when (t.mode) {
+        ThemeMode.SYSTEM -> glanceColorProviders(light = light, dark = dark)
+        ThemeMode.LIGHT -> glanceColorProviders(light = light, dark = light)
+        ThemeMode.DARK -> glanceColorProviders(light = dark, dark = dark)
     }
 }
 
@@ -112,7 +138,7 @@ private fun palette(color: WidgetColor): Palette {
     val c = GlanceTheme.colors
     return when (color) {
         WidgetColor.NEUTRAL -> Palette(
-            bg = c.widgetBackground, fg = c.onSurface, sub = c.onSurfaceVariant, accent = c.primary,
+            bg = c.surface, fg = c.onSurface, sub = c.onSurfaceVariant, accent = c.primary,
             bar = c.primary, current = c.tertiary, future = c.surfaceVariant,
             chipBg = c.primaryContainer, chipFg = c.onPrimaryContainer, row = c.surfaceVariant,
         )

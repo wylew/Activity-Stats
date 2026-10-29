@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.wylew.activitystats.data.Connection
 import com.wylew.activitystats.data.healthconnect.HcStatus
 import com.wylew.activitystats.domain.Units
+import com.wylew.activitystats.theme.ThemeSettings
 import com.wylew.activitystats.graph
 import com.wylew.activitystats.sync.SyncScheduler
 import com.wylew.activitystats.widget.Widgets
@@ -51,6 +52,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val connection by graph.settings.connection.collectAsState(Connection(false, null, null))
     val units by graph.settings.units.collectAsState(Units.IMPERIAL)
+    val theme by graph.settings.theme.collectAsState(ThemeSettings())
     var hc by remember { mutableStateOf<HcStatus?>(null) }
     var hcBackground by remember { mutableStateOf(false) }
 
@@ -160,6 +162,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
+                    }
+                }
+
+                ThemeSection(theme) { t ->
+                    scope.launch {
+                        graph.settings.setTheme(t)
+                        Widgets.updateAll(context)
                     }
                 }
 

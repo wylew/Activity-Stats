@@ -4,6 +4,7 @@ An Android dashboard and home-screen widgets for your Garmin and Strava workouts
 
 - **Widgets:** one configurable roll-up widget. For each widget you choose the activity (**Run**, **Ride** or **All**), **Daily** or **Weekly**, the headline number (count, distance or time) and a color. At 2×2 it shows the headline number; at 4×2 and up it adds day bars (weekly) or today's list (daily). Colors follow your wallpaper (Material You).
 - **Dashboard:** Week / Month / Year roll-ups with a distance hero card, a comparison against the same point last period, moving time, pace, elevation, heart rate, a goal bar and recent activities.
+- **Theming:** Settings → Theme. Pick System, Light or Dark, then either **Match wallpaper** (Material You) or **Pick your own colors**: two seed colors (primary and accent) generate full light and dark Material 3 schemes, with presets like Holiday (red + green). The app, system bars and widgets all follow it.
 - **Data:** Health Connect, which Garmin Connect and Strava both write to. When the same run arrives from both, it's counted once (the Garmin copy wins; a Strava title is kept). Refreshed hourly and on open. The Strava API is supported as an optional extra for people with a Strava subscription.
 
 Design mockups live on the "Rollup" canvas in Claude.
@@ -47,6 +48,7 @@ app/src/main/java/com/wylew/activitystats/
   ui/dashboard/    Compose dashboard + ViewModel
   ui/widgetconfig/ Widget setup screen with live preview
   ui/settings/     Strava connection, units
+  theme/           ColorScience (CIELAB tonal palettes), SchemeGenerator (two seeds → M3 roles), ThemeSettings
   ui/components/   CookieShape, WavyProgress, RollupBars
   widget/          Glance widget, per-widget settings
 ```
