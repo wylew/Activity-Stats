@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three rising bars: the weekly roll-up. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFDCE1FF"
+        android:pathData="M36,58a5,5 0,0 1,10 0v16a5,5 0,0 1,-10 0z" />
+    <path
+        android:fillColor="#FFDCE1FF"
+        android:pathData="M49,46a5,5 0,0 1,10 0v28a5,5 0,0 1,-10 0z" />
+    <path
+        android:fillColor="#FFFFB694"
+        android:pathData="M62,36a5,5 0,0 1,10 0v38a5,5 0,0 1,-10 0z" />
+</vector>

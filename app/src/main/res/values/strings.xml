@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Activity Stats</string>
+    <string name="widget_name">Activity roll-up</string>
+    <string name="widget_description">Daily or weekly totals for runs, rides or everything</string>
+</resources>
