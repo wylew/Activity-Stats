@@ -17,7 +17,7 @@ import com.wylew.activitystats.widget.Widgets
 import java.util.concurrent.TimeUnit
 
 /**
- * Pulls from Health Connect (and Strava, if connected), then redraws every widget.
+ * Pulls from Health Connect, then redraws every widget.
  *
  * Runs hourly. That also rolls widgets over after midnight (new day) and on Monday (new week).
  */
@@ -27,7 +27,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         Widgets.updateAll(applicationContext)
         return when (result) {
             is SyncResult.Success, SyncResult.NotConnected -> Result.success()
-            is SyncResult.RateLimited, is SyncResult.Failed -> if (runAttemptCount < 3) Result.retry() else Result.failure()
+            is SyncResult.Failed -> if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 }

@@ -6,13 +6,9 @@ import com.wylew.activitystats.data.ActivityRepository
 import com.wylew.activitystats.data.ActivityStore
 import com.wylew.activitystats.data.SettingsStore
 import com.wylew.activitystats.data.healthconnect.HealthConnectSource
-import com.wylew.activitystats.data.strava.StravaApi
-import com.wylew.activitystats.data.strava.StravaAuth
 import com.wylew.activitystats.sync.SyncScheduler
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class ActivityStatsApp : Application() {
     lateinit var graph: AppGraph
@@ -27,20 +23,11 @@ class ActivityStatsApp : Application() {
 
 /** Hand-rolled dependency container; small enough not to need Hilt yet. */
 class AppGraph(context: Context) {
-    val json = Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-    }
-    val http: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val json = Json { ignoreUnknownKeys = true }
     val settings = SettingsStore(context)
-    val auth = StravaAuth(settings, http, json)
-    val api = StravaApi(http, json, auth)
     val healthConnect = HealthConnectSource(context)
     val store = ActivityStore(File(context.filesDir, "activities.json"), json)
-    val repository = ActivityRepository(healthConnect, api, auth, store, settings)
+    val repository = ActivityRepository(healthConnect, store, settings)
 }
 
 val Context.graph: AppGraph get() = (applicationContext as ActivityStatsApp).graph

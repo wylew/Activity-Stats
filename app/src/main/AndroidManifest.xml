@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-
     <!-- Health Connect: read workouts written by Garmin Connect, Strava, etc. -->
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
@@ -13,14 +11,6 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
-        <!-- Lets us hand OAuth to the Strava app when it is installed. -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="strava" />
-        </intent>
-        <intent>
-            <action android:name="android.support.customtabs.action.CustomTabsService" />
-        </intent>
     </queries>
 
     <application
@@ -34,20 +24,10 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTask">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <!-- Strava OAuth redirect: activitystats://localhost/strava-callback -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:host="localhost"
-                    android:scheme="activitystats" />
             </intent-filter>
         </activity>
 
@@ -83,7 +63,7 @@
         </activity>
 
         <receiver
-            android:name=".widget.RollupWidgetReceiver"
+            android:name=".widget.TotalsWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_name">
             <intent-filter>
@@ -91,18 +71,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/rollup_widget_info" />
-        </receiver>
-        <receiver
-            android:name=".widget.GoalRingWidgetReceiver"
-            android:exported="true"
-            android:label="@string/goal_widget_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/goal_widget_info" />
+                android:resource="@xml/totals_widget_info" />
         </receiver>
         <receiver
             android:name=".widget.StreakWidgetReceiver"
@@ -126,5 +95,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/latest_widget_info" />
         </receiver>
+        <!-- Applies the style chosen in the in-app widget gallery after a widget is pinned. -->
+        <receiver
+            android:name=".widget.WidgetPinnedReceiver"
+            android:exported="false" />
     </application>
 </manifest>

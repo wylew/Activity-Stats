@@ -48,21 +48,4 @@ class StreaksTest {
         assertEquals(1, Streaks.weekly(acts, ActivityFilter.RUN, today, zone).weeks)
         assertEquals(2, Streaks.weekly(acts, ActivityFilter.ALL, today, zone).weeks)
     }
-
-    @Test
-    fun goalsScaleByPeriod() {
-        val g = Goals()
-        assertEquals(g.runWeeklyM / 7, g.forPeriod(ActivityFilter.RUN, RollupPeriod.DAILY), 0.01)
-        assertEquals(g.rideWeeklyM, g.forPeriod(ActivityFilter.RIDE, RollupPeriod.WEEKLY), 0.01)
-    }
-
-    @Test
-    fun sourceChoiceFiltersOrigins() {
-        val garmin = run(today).copy(id = "g", origin = "Garmin")
-        val strava = run(today).copy(id = "s", origin = "Strava", startEpochSec = garmin.startEpochSec + 30)
-        val both = ActivityView.apply(listOf(garmin, strava), SourcePrefs(SourceChoice.BOTH, PreferOrigin.STRAVA))
-        assertEquals(listOf("s"), both.map { it.id })
-        assertEquals(listOf("g"), ActivityView.apply(listOf(garmin, strava), SourcePrefs(SourceChoice.GARMIN)).map { it.id })
-        assertEquals(1, ActivityView.mergedCount(listOf(garmin, strava), SourcePrefs()))
-    }
 }

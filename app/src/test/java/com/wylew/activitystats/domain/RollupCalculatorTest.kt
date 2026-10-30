@@ -22,7 +22,7 @@ class RollupCalculatorTest {
         hr: Double? = null,
     ) = Activity(
         id = id,
-        source = Source.STRAVA,
+        source = Source.HEALTH_CONNECT,
         name = id,
         kind = kind,
         sportType = kind.name,
@@ -94,10 +94,4 @@ class RollupCalculatorTest {
         assertEquals(6, r.count)
     }
 
-    @Test
-    fun stravaSportTypes() {
-        assertEquals(ActivityKind.RUN, ActivityKind.fromStrava("TrailRun"))
-        assertEquals(ActivityKind.RIDE, ActivityKind.fromStrava("GravelRide"))
-        assertEquals(ActivityKind.OTHER, ActivityKind.fromStrava("Yoga"))
-    }
 }

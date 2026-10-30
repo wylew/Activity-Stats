@@ -1,9 +1,7 @@
 <resources>
     <string name="app_name">Activity Stats</string>
-    <string name="widget_name">Activity roll-up</string>
-    <string name="widget_description">Daily or weekly totals for runs, rides or everything</string>
-    <string name="goal_widget_name">Goal ring</string>
-    <string name="goal_widget_description">Wavy progress ring toward your daily or weekly distance goal</string>
+    <string name="widget_name">Totals</string>
+    <string name="widget_description">Daily, weekly or monthly totals for runs, rides or everything</string>
     <string name="streak_widget_name">Streak</string>
     <string name="streak_widget_description">Weeks in a row with a run, ride or any activity</string>
     <string name="latest_widget_name">Latest activity</string>

@@ -5,7 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -22,10 +25,12 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import com.wylew.activitystats.domain.Bucket
 import com.wylew.activitystats.domain.Format
 import com.wylew.activitystats.domain.Rollup
 import com.wylew.activitystats.domain.RollupCalculator
@@ -36,15 +41,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-class RollupWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = RollupWidget()
+class TotalsWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = TotalsWidget()
 }
 
 /**
- * 4×2 roll-up: Run / Ride / All, Daily or Weekly.
- * Narrow sizes show the headline; wide ones add day bars (weekly) or today's list (daily).
+ * Daily, weekly or monthly totals for runs, rides or everything. Three looks:
+ * - Bars: headline beside day (or week) bars; today's list when daily.
+ * - Badge: the number in a scalloped badge with a dot per day (or week), like the streak.
+ * - Big number: just the number.
  */
-internal class RollupWidget : ActivityStatsWidget(WidgetKind.ROLLUP) {
+internal class TotalsWidget : ActivityStatsWidget(WidgetKind.TOTALS) {
 
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE))
 
@@ -52,22 +59,13 @@ internal class RollupWidget : ActivityStatsWidget(WidgetKind.ROLLUP) {
     override fun Content(context: Context, state: WidgetState) {
         val s = state.settings
         val r = RollupCalculator.compute(state.activities, s.filter, s.period.rollup, LocalDate.now(), ZoneId.systemDefault())
+        val h = headline(r, s, state.inputs.units)
         val p = state.palette
         val wide = LocalSize.current.width >= WIDE.width
-        val h = headline(r, s, state.inputs.units)
-
-        WidgetFrame(p) {
-            if (wide) {
-                Row(GlanceModifier.fillMaxSize()) {
-                    Summary(h, p, big = 56, modifier = GlanceModifier.defaultWeight().fillMaxHeight())
-                    Spacer(GlanceModifier.width(12.dp))
-                    Box(GlanceModifier.defaultWeight().fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
-                        if (s.period == WidgetPeriod.WEEKLY) Bars(r, p) else TodayList(r, s, state.inputs.units, p)
-                    }
-                }
-            } else {
-                Summary(h, p, big = 44, modifier = GlanceModifier.fillMaxSize())
-            }
+        when (s.style) {
+            WidgetStyle.BADGE -> BadgeTotals(context, r, s, h, p, wide)
+            WidgetStyle.NUMBER -> NumberTotals(s, h, p, wide)
+            else -> BarsTotals(r, s, h, p, wide, state.inputs.units)
         }
     }
 
@@ -78,9 +76,82 @@ internal class RollupWidget : ActivityStatsWidget(WidgetKind.ROLLUP) {
 }
 
 @Composable
-private fun Summary(h: Headline, p: GlancePalette, big: Int, modifier: GlanceModifier) {
+private fun BarsTotals(r: Rollup, s: WidgetSettings, h: Headline, p: GlancePalette, wide: Boolean, units: Units) {
+    WidgetFrame(p) {
+        if (wide) {
+            Row(GlanceModifier.fillMaxSize()) {
+                Summary(h, s, p, big = 56, modifier = GlanceModifier.defaultWeight().fillMaxHeight())
+                Spacer(GlanceModifier.width(12.dp))
+                Box(GlanceModifier.defaultWeight().fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
+                    if (s.period == WidgetPeriod.DAILY) TodayList(r, s, units, p) else Bars(r.buckets, p)
+                }
+            }
+        } else {
+            Summary(h, s, p, big = 44, modifier = GlanceModifier.fillMaxSize())
+        }
+    }
+}
+
+@Composable
+private fun BadgeTotals(context: Context, r: Rollup, s: WidgetSettings, h: Headline, p: GlancePalette, wide: Boolean) {
+    val badgeText = if (h.big.length > 4) h.big.substringBefore('.') else h.big
+    WidgetFrame(p) {
+        Column(GlanceModifier.fillMaxSize()) {
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Badge(context, badgeText, p, size = if (wide) 72.dp else 64.dp, fontSize = if (badgeText.length > 3) 20.sp else 26.sp)
+                Spacer(GlanceModifier.defaultWeight())
+                Image(ImageProvider(iconFor(s.filter)), null, GlanceModifier.size(22.dp), colorFilter = ColorFilter.tint(p.fg))
+            }
+            Spacer(GlanceModifier.defaultWeight())
+            Text(h.caption, style = TextStyle(color = p.fg, fontSize = 16.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Text(h.second, style = TextStyle(color = p.sub, fontSize = 12.sp), maxLines = 1)
+            val dots = dotsFor(r)
+            if (dots.isNotEmpty()) {
+                Spacer(GlanceModifier.height(8.dp))
+                Dots(dots, p)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NumberTotals(s: WidgetSettings, h: Headline, p: GlancePalette, wide: Boolean) {
+    WidgetFrame(p, padding = 18.dp) {
+        Column(GlanceModifier.fillMaxSize()) {
+            Chip(h.chip, p, icon = iconFor(s.filter))
+            Spacer(GlanceModifier.defaultWeight())
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    h.big,
+                    style = TextStyle(color = p.accent, fontSize = (if (wide) 72 else 52).sp, fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                )
+                Spacer(GlanceModifier.width(6.dp))
+                Text(
+                    h.bigUnit,
+                    style = TextStyle(color = p.fg, fontSize = 18.sp, fontWeight = FontWeight.Medium),
+                    modifier = GlanceModifier.padding(bottom = 12.dp),
+                    maxLines = 1,
+                )
+            }
+            Text(h.second, style = TextStyle(color = p.sub, fontSize = 14.sp), maxLines = 1)
+        }
+    }
+}
+
+/** One dot per day (weekly) or per week (monthly); nothing for daily. */
+internal fun dotsFor(r: Rollup): List<DotState> = r.buckets.map {
+    when {
+        it.isFuture -> DotState.FUTURE
+        it.count > 0 -> DotState.ON
+        else -> DotState.OFF
+    }
+}
+
+@Composable
+private fun Summary(h: Headline, s: WidgetSettings, p: GlancePalette, big: Int, modifier: GlanceModifier) {
     Column(modifier) {
-        Chip(h.chip, p)
+        Chip(h.chip, p, icon = iconFor(s.filter))
         Spacer(GlanceModifier.defaultWeight())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(h.big, style = TextStyle(color = p.accent, fontSize = big.sp, fontWeight = FontWeight.Bold), maxLines = 1)
@@ -97,10 +168,10 @@ private fun Summary(h: Headline, p: GlancePalette, big: Int, modifier: GlanceMod
 }
 
 @Composable
-private fun Bars(r: Rollup, p: GlancePalette) {
-    val max = r.buckets.maxOfOrNull { it.distanceM }?.takeIf { it > 0 } ?: 1.0
+private fun Bars(buckets: List<Bucket>, p: GlancePalette) {
+    val max = buckets.maxOfOrNull { it.distanceM }?.takeIf { it > 0 } ?: 1.0
     Row(GlanceModifier.fillMaxWidth().height(116.dp), verticalAlignment = Alignment.Bottom) {
-        r.buckets.forEach { b ->
+        buckets.forEach { b ->
             Column(
                 GlanceModifier.defaultWeight().fillMaxHeight(),
                 verticalAlignment = Alignment.Bottom,

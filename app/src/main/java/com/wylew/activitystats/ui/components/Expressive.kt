@@ -63,49 +63,6 @@ class CookieShape(private val lobes: Int = 9, private val depth: Float = 0.07f) 
     }
 }
 
-/** Linear wavy progress: the wave runs to [progress], a flat track fills the rest. */
-@Composable
-fun WavyProgress(
-    progress: Float,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.tertiary,
-    trackColor: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.24f),
-    strokeWidth: Dp = 6.dp,
-    amplitude: Dp = 3.dp,
-    wavelength: Dp = 30.dp,
-) {
-    val p = progress.coerceIn(0f, 1f)
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(20.dp)
-            .semantics { contentDescription = "${(p * 100).toInt()} percent" }
-    ) {
-        val sw = strokeWidth.toPx()
-        val amp = amplitude.toPx()
-        val wl = wavelength.toPx()
-        val cy = size.height / 2f
-        val startX = sw / 2f
-        val endX = size.width - sw / 2f
-        val waveEnd = startX + (endX - startX) * p
-        val gap = 8.dp.toPx()
-
-        if (waveEnd + gap < endX) {
-            drawLine(trackColor, Offset(waveEnd + gap, cy), Offset(endX, cy), sw, StrokeCap.Round)
-        }
-        if (p > 0f) {
-            val path = Path().apply {
-                moveTo(startX, cy)
-                var x = startX
-                while (x <= waveEnd) {
-                    lineTo(x, cy + amp * sin(2f * PI.toFloat() * (x - startX) / wl))
-                    x += 1.5f
-                }
-            }
-            drawPath(path, color, style = Stroke(width = sw, cap = StrokeCap.Round))
-        }
-    }
-}
 
 /** Rounded pill bars; the current bucket is highlighted, future ones are outlined. */
 @Composable

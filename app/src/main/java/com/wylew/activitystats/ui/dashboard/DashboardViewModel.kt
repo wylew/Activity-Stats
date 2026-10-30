@@ -3,17 +3,14 @@ package com.wylew.activitystats.ui.dashboard
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.wylew.activitystats.data.Connection
 import com.wylew.activitystats.data.SyncResult
 import com.wylew.activitystats.data.healthconnect.HcStatus
 import com.wylew.activitystats.domain.Activity
 import com.wylew.activitystats.domain.ActivityFilter
-import com.wylew.activitystats.domain.ActivityView
-import com.wylew.activitystats.domain.Goals
+import com.wylew.activitystats.domain.Dedupe
 import com.wylew.activitystats.domain.Rollup
 import com.wylew.activitystats.domain.RollupCalculator
 import com.wylew.activitystats.domain.RollupPeriod
-import com.wylew.activitystats.domain.SourcePrefs
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.domain.localDate
 import com.wylew.activitystats.graph
@@ -23,7 +20,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -31,32 +27,24 @@ import java.time.ZoneId
 
 data class DashboardState(
     val loading: Boolean = true,
-    val connection: Connection = Connection(false, null, null),
+    val lastSyncMs: Long? = null,
     val healthConnect: HcStatus = HcStatus.NO_PERMISSION,
-    val sources: SourcePrefs = SourcePrefs(),
     val units: Units = Units.IMPERIAL,
     val period: RollupPeriod = RollupPeriod.WEEKLY,
     val filter: ActivityFilter = ActivityFilter.RUN,
     val rollup: Rollup? = null,
     val previous: Rollup? = null,
-    val goalM: Double = 0.0,
     /** Copies collapsed in this period, e.g. a run that came from both Garmin and Strava. */
     val merged: Int = 0,
     /** Apps that actually supplied data, e.g. ["Garmin", "Strava"]. */
     val origins: List<String> = emptyList(),
 ) {
-    val hasSource: Boolean get() = healthConnect == HcStatus.READY || connection.connected
+    val hasSource: Boolean get() = healthConnect == HcStatus.READY
 }
 
 private data class Selection(val period: RollupPeriod, val filter: ActivityFilter)
 
-private data class Inputs(
-    val raw: List<Activity>,
-    val sources: SourcePrefs,
-    val goals: Goals,
-    val units: Units,
-    val connection: Connection,
-)
+private data class Inputs(val raw: List<Activity>, val units: Units, val lastSyncMs: Long?)
 
 class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = app.graph
@@ -73,11 +61,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val inputs = combine(
         graph.repository.raw,
-        graph.settings.sources,
-        graph.settings.goals,
         graph.settings.units,
-        graph.settings.connection,
-    ) { raw, sources, goals, units, connection -> Inputs(raw, sources, goals, units, connection) }
+        graph.settings.lastSyncMs,
+    ) { raw, units, lastSync -> Inputs(raw, units, lastSync) }
 
     val state: StateFlow<DashboardState> = combine(inputs, selection, hcStatus) { i, sel, hc ->
         build(i, sel, hc)
@@ -86,7 +72,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             refreshSourcesNow()
-            if (hcStatus.value == HcStatus.READY || graph.settings.connection.first().connected) sync()
+            if (hcStatus.value == HcStatus.READY) sync()
         }
     }
 
@@ -116,13 +102,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         getApplication<Application>().startActivity(graph.healthConnect.installIntent())
     }
 
-    fun connectStrava() {
-        if (!graph.auth.isConfigured) {
-            _message.value = "Add strava.clientId and strava.clientSecret to local.properties, then rebuild."
-            return
-        }
-        graph.auth.launchAuthorize(getApplication())
-    }
 
     fun sync() {
         if (_syncing.value) return
@@ -130,7 +109,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _syncing.value = true
             when (val r = graph.repository.sync()) {
                 is SyncResult.Success, SyncResult.NotConnected -> Unit
-                is SyncResult.RateLimited -> _message.value = "Strava rate limit hit. Try again in ~15 minutes."
                 is SyncResult.Failed -> _message.value = "Sync failed: ${r.message}"
             }
             Widgets.updateAll(getApplication())
@@ -141,7 +119,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private fun build(i: Inputs, sel: Selection, hc: HcStatus): DashboardState {
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
-        val activities = ActivityView.apply(i.raw, i.sources)
+        val activities = Dedupe.apply(i.raw)
         val rollup = RollupCalculator.compute(activities, sel.filter, sel.period, today, zone)
 
         val rawInPeriod = i.raw.filter {
@@ -150,16 +128,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         return DashboardState(
             loading = false,
-            connection = i.connection,
+            lastSyncMs = i.lastSyncMs,
             healthConnect = hc,
-            sources = i.sources,
             units = i.units,
             period = sel.period,
             filter = sel.filter,
             rollup = rollup,
             previous = RollupCalculator.previousToDate(activities, sel.filter, sel.period, today, zone),
-            goalM = i.goals.forPeriod(sel.filter, sel.period),
-            merged = ActivityView.mergedCount(rawInPeriod, i.sources),
+            merged = rawInPeriod.size - Dedupe.apply(rawInPeriod).size,
             origins = i.raw.mapNotNull { it.origin }.distinct().sorted(),
         )
     }

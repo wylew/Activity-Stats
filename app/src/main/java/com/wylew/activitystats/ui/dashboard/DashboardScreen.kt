@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,16 +62,15 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wylew.activitystats.data.healthconnect.HcStatus
+import com.wylew.activitystats.graph
 import com.wylew.activitystats.domain.ActivityFilter
 import com.wylew.activitystats.domain.Format
 import com.wylew.activitystats.domain.Rollup
 import com.wylew.activitystats.domain.RollupPeriod
-import com.wylew.activitystats.domain.SourceChoice
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.ui.components.ActivityRow
 import com.wylew.activitystats.ui.components.ConnectedButtonGroup
 import com.wylew.activitystats.ui.components.RollupBars
-import com.wylew.activitystats.ui.components.WavyProgress
 import com.wylew.activitystats.ui.components.groupShape
 import com.wylew.activitystats.widget.iconFor
 import java.time.format.DateTimeFormatter
@@ -83,7 +83,6 @@ fun DashboardScreen(
     padding: PaddingValues,
     snackbar: SnackbarHostState,
     onSeeAll: () -> Unit,
-    onManageSources: () -> Unit,
     vm: DashboardViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -127,7 +126,6 @@ fun DashboardScreen(
                     status = state.healthConnect,
                     onAllow = { hcPermissionLauncher.launch(vm.healthConnectPermissions) },
                     onInstall = vm::installHealthConnect,
-                    onStrava = vm::connectStrava,
                 )
             }
         }
@@ -135,7 +133,6 @@ fun DashboardScreen(
         val r = state.rollup ?: return@LazyColumn
         item { HeroCard(r, state.previous, state.units) }
         item { StatGrid(r, state.units) }
-        item { GoalCard(r, state.goalM, state.units) }
         item {
             Row(
                 Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp),
@@ -164,7 +161,7 @@ fun DashboardScreen(
             }
         }
         if (state.hasSource) {
-            item { SourcesCard(state, onManageSources) }
+            item { SourcesCard(state) }
         }
     }
 }
@@ -221,17 +218,13 @@ private fun Header(state: DashboardState, syncing: Boolean, onFilter: (ActivityF
 }
 
 @Composable
-private fun SourcesSetupCard(status: HcStatus, onAllow: () -> Unit, onInstall: () -> Unit, onStrava: () -> Unit) {
+private fun SourcesSetupCard(status: HcStatus, onAllow: () -> Unit, onInstall: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.large) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Bring in your workouts", style = MaterialTheme.typography.titleLarge)
             when (status) {
                 HcStatus.UNAVAILABLE -> {
-                    Text(
-                        "Health Connect isn't available on this phone. You can connect the Strava API instead (needs a Strava subscription).",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Button(onClick = onStrava) { Text("Connect Strava API") }
+                    Text("Health Connect isn't available on this phone, so Activity Stats can't read workouts here.", style = MaterialTheme.typography.bodyMedium)
                 }
                 HcStatus.NEEDS_INSTALL -> {
                     Text(
@@ -241,8 +234,14 @@ private fun SourcesSetupCard(status: HcStatus, onAllow: () -> Unit, onInstall: (
                     Button(onClick = onInstall) { Text("Install Health Connect") }
                 }
                 HcStatus.NO_PERMISSION, HcStatus.READY -> {
-                    Text("Allow Activity Stats to read the workouts Garmin Connect and Strava share with Health Connect.", style = MaterialTheme.typography.bodyMedium)
+                    Text("1. In Garmin Connect: More → Settings → Health Connect, and allow sharing.", style = MaterialTheme.typography.bodyMedium)
+                    Text("2. In Strava: You → Settings → Manage Apps and Devices → Health Connect.", style = MaterialTheme.typography.bodyMedium)
+                    Text("3. Let Activity Stats read your workouts:", style = MaterialTheme.typography.bodyMedium)
                     Button(onClick = onAllow) { Text("Allow Health Connect access") }
+                    Text(
+                        "Your data stays on this phone. Allow background access so widgets update while the app is closed.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }
@@ -338,43 +337,14 @@ private fun StatGrid(r: Rollup, units: Units) {
     }
 }
 
-@Composable
-private fun GoalCard(r: Rollup, goalM: Double, units: Units) {
-    if (goalM <= 0) return
-    val cs = MaterialTheme.colorScheme
-    val progress = (r.distanceM / goalM).toFloat()
-    val label = when (r.period) {
-        RollupPeriod.DAILY -> "Daily goal"
-        RollupPeriod.WEEKLY -> "Weekly goal"
-        RollupPeriod.MONTHLY -> "Monthly goal"
-        RollupPeriod.YEARLY -> "Yearly goal"
-    }
-    Surface(color = cs.tertiaryContainer, contentColor = cs.onTertiaryContainer, shape = MaterialTheme.shapes.large) {
-        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text(
-                    "${Format.distance(r.distanceM, units)} of ${Format.distance(goalM, units)} ${Format.distanceUnit(units)} · ${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-            WavyProgress(progress, color = cs.tertiary, trackColor = cs.tertiary.copy(alpha = 0.25f))
-        }
-    }
-}
 
 @Composable
-private fun SourcesCard(state: DashboardState, onManage: () -> Unit) {
+private fun SourcesCard(state: DashboardState) {
     val cs = MaterialTheme.colorScheme
-    val last = state.connection.lastSyncMs
-    val synced = last?.let {
+    val context = LocalContext.current
+    val synced = state.lastSyncMs?.let {
         "Synced " + DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString().lowercase()
     } ?: "Not synced yet"
-    val shown = when (state.sources.choice) {
-        SourceChoice.GARMIN -> listOf("Garmin Connect")
-        SourceChoice.STRAVA -> listOf("Strava")
-        SourceChoice.BOTH -> listOf("Garmin Connect", "Strava")
-    }
     Surface(
         shape = MaterialTheme.shapes.large,
         border = BorderStroke(1.dp, cs.outlineVariant),
@@ -386,25 +356,24 @@ private fun SourcesCard(state: DashboardState, onManage: () -> Unit) {
                 Icon(Icons.Outlined.MonitorHeart, contentDescription = null, tint = cs.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(if (state.healthConnect == HcStatus.READY) "Health Connect" else "Strava API", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Health Connect", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(synced, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
-                TextButton(onClick = onManage) { Text("Manage") }
+                TextButton(onClick = { context.startActivity(context.graph.healthConnect.settingsIntent()) }) { Text("Open") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                shown.forEach { name ->
-                    val seen = state.origins.any { name.startsWith(it) }
-                    Row(
-                        Modifier
-                            .background(if (seen) cs.secondaryContainer else cs.surfaceContainerHigh, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (seen) {
+            if (state.origins.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.origins.forEach { name ->
+                        Row(
+                            Modifier
+                                .background(cs.secondaryContainer, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Icon(Icons.Filled.Check, contentDescription = null, tint = cs.onSecondaryContainer, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
+                            Text(name, style = MaterialTheme.typography.labelLarge, color = cs.onSecondaryContainer)
                         }
-                        Text(name, style = MaterialTheme.typography.labelLarge, color = if (seen) cs.onSecondaryContainer else cs.onSurfaceVariant)
                     }
                 }
             }

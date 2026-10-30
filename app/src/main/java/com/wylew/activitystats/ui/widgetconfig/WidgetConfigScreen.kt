@@ -49,17 +49,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wylew.activitystats.domain.Activity
 import com.wylew.activitystats.domain.ActivityFilter
-import com.wylew.activitystats.domain.ActivityView
-import com.wylew.activitystats.domain.Format
-import com.wylew.activitystats.domain.Goals
-import com.wylew.activitystats.domain.SourcePrefs
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.widget.WidgetColor
 import com.wylew.activitystats.widget.WidgetKind
 import com.wylew.activitystats.widget.WidgetMetric
 import com.wylew.activitystats.widget.WidgetPeriod
 import com.wylew.activitystats.widget.WidgetSettings
-import com.wylew.activitystats.widget.WidgetSource
 import com.wylew.activitystats.widget.iconFor
 import com.wylew.activitystats.widget.widgetPalette
 
@@ -67,17 +62,14 @@ import com.wylew.activitystats.widget.widgetPalette
 fun WidgetConfigScreen(
     kind: WidgetKind,
     initial: WidgetSettings,
-    raw: List<Activity>,
-    sources: SourcePrefs,
+    activities: List<Activity>,
     units: Units,
-    goals: Goals,
     connected: Boolean,
     onConnect: () -> Unit,
     onClose: () -> Unit,
     onSave: (WidgetSettings) -> Unit,
 ) {
     var s by remember { mutableStateOf(initial) }
-    val activities = remember(raw, sources, s.source) { ActivityView.apply(raw, sources, s.source.choice) }
 
     Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -96,7 +88,7 @@ fun WidgetConfigScreen(
             }
 
             WallpaperBackdrop(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                WidgetPreview(kind, s, activities, units, goals)
+                WidgetPreview(kind, s, activities, units)
             }
 
             if (!connected) {
@@ -111,6 +103,22 @@ fun WidgetConfigScreen(
             }
 
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                Section("Style") {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        kind.styles.forEachIndexed { i, style ->
+                            SegmentedButton(
+                                selected = s.style == style,
+                                onClick = {
+                                    // Switching style picks up that style's color default unless the user already chose one.
+                                    val d = WidgetSettings.defaultsFor(kind, style)
+                                    s = s.copy(style = style, color = if (s.color == WidgetSettings.defaultsFor(kind, s.style).color) d.color else s.color)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(i, kind.styles.size),
+                            ) { Text(style.label, maxLines = 1) }
+                        }
+                    }
+                }
+
                 Section("Activity") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActivityFilter.entries.forEach { f ->
@@ -139,21 +147,17 @@ fun WidgetConfigScreen(
                             }
                         }
                         Text(
-                            if (s.period == WidgetPeriod.WEEKLY) "Monday to Sunday. Resets every Monday at midnight." else "Today only. Resets at midnight.",
+                            when (s.period) {
+                                WidgetPeriod.DAILY -> "Today only. Resets at midnight."
+                                WidgetPeriod.WEEKLY -> "Monday to Sunday. Resets every Monday."
+                                WidgetPeriod.MONTHLY -> "This calendar month. Resets on the 1st."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
 
-                if (kind == WidgetKind.GOAL) {
-                    val goal = goals.forPeriod(s.filter, s.period.rollup)
-                    Text(
-                        "Goal: ${Format.distance(goal, units)} ${Format.distanceUnit(units)} per ${if (s.period == WidgetPeriod.WEEKLY) "week" else "day"}. Change weekly goals in Settings.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
 
                 if (kind.usesMetric) {
                     Section("Headline number") {
@@ -170,31 +174,6 @@ fun WidgetConfigScreen(
                     }
                 }
 
-                Section("Data from") {
-                    Column(Modifier.selectableGroup()) {
-                        WidgetSource.entries.forEach { src ->
-                            val selected = s.source == src
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface,
-                                        RoundedCornerShape(16.dp),
-                                    )
-                                    .selectable(selected = selected, role = Role.RadioButton, onClick = { s = s.copy(source = src) })
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(selected = selected, onClick = null)
-                                Spacer(Modifier.width(12.dp))
-                                Column {
-                                    Text(src.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                                    Text(src.sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
 
                 Section("Color") {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

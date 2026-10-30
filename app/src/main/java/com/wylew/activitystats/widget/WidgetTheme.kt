@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.glance.unit.ColorProvider
@@ -84,50 +83,6 @@ fun glancePalette(context: Context, theme: ThemeSettings, color: WidgetColor): G
  * so they still follow light/dark without re-rendering.
  */
 object WidgetBitmaps {
-    private const val WAVES = 14
-
-    private fun stroke(px: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = px
-        strokeCap = Paint.Cap.ROUND
-        color = android.graphics.Color.WHITE
-    }
-
-    /** M3 Expressive-style wavy circular progress, from 12 o'clock clockwise. */
-    fun wavyArc(sizePx: Int, strokePx: Float, progress: Float): Bitmap {
-        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        val p = progress.coerceIn(0f, 1f)
-        if (p <= 0f) return bmp
-        val amp = strokePx * 0.45f
-        val c = sizePx / 2f
-        val r = c - strokePx / 2f - amp
-        val path = Path()
-        val steps = (360 * p).toInt().coerceAtLeast(2)
-        for (i in 0..steps) {
-            val t = i / 360.0 * 2 * PI
-            val rr = r + amp * sin(WAVES * t).toFloat()
-            val a = t - PI / 2
-            val x = c + rr * cos(a).toFloat()
-            val y = c + rr * sin(a).toFloat()
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        Canvas(bmp).drawPath(path, stroke(strokePx))
-        return bmp
-    }
-
-    /** The flat remainder of the ring, with small gaps at both ends. */
-    fun track(sizePx: Int, strokePx: Float, progress: Float): Bitmap {
-        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        val p = progress.coerceIn(0f, 1f)
-        val amp = strokePx * 0.45f
-        val inset = strokePx / 2f + amp
-        val rect = RectF(inset, inset, sizePx - inset, sizePx - inset)
-        val gap = if (p > 0f) 12f else 0f
-        val sweep = 360f * (1 - p) - 2 * gap
-        if (sweep > 0f) Canvas(bmp).drawArc(rect, -90f + 360f * p + gap, sweep, false, stroke(strokePx))
-        return bmp
-    }
-
     /** Nine-lobed "cookie" badge. */
     fun cookie(sizePx: Int, lobes: Int = 9, depth: Float = 0.07f): Bitmap {
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)

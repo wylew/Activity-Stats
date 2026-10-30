@@ -2,26 +2,13 @@ package com.wylew.activitystats.domain
 
 import kotlinx.serialization.Serializable
 
-/** Where an activity came from. Health Connect (Garmin) is planned; Strava is live. */
+/** Where an activity was read from. Only Health Connect today; STRAVA is kept for old caches. */
 @Serializable
 enum class Source { STRAVA, HEALTH_CONNECT }
 
 @Serializable
 enum class ActivityKind {
-    RUN, RIDE, WALK, HIKE, SWIM, OTHER;
-
-    companion object {
-        /** Maps Strava's `sport_type` (falls back to the legacy `type`). */
-        fun fromStrava(sportType: String?): ActivityKind = when (sportType) {
-            "Run", "TrailRun", "VirtualRun" -> RUN
-            "Ride", "MountainBikeRide", "GravelRide", "EBikeRide", "EMountainBikeRide",
-            "VirtualRide", "Velomobile", "Handcycle" -> RIDE
-            "Walk" -> WALK
-            "Hike" -> HIKE
-            "Swim" -> SWIM
-            else -> OTHER
-        }
-    }
+    RUN, RIDE, WALK, HIKE, SWIM, OTHER
 }
 
 /** What a widget or the dashboard counts. */
@@ -41,7 +28,7 @@ enum class ActivityFilter(val label: String, val singular: String, val plural: S
 
 @Serializable
 data class Activity(
-    /** Unique across sources, e.g. "strava:1234567". */
+    /** Unique per record, e.g. "hc:<Health Connect id>". */
     val id: String,
     val source: Source,
     val name: String,
