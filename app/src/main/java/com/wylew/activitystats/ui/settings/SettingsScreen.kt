@@ -3,19 +3,22 @@ package com.wylew.activitystats.ui.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
@@ -33,11 +36,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.wylew.activitystats.data.Connection
 import com.wylew.activitystats.data.healthconnect.HcStatus
+import com.wylew.activitystats.domain.ActivityFilter
+import com.wylew.activitystats.domain.Format
+import com.wylew.activitystats.domain.Goals
+import com.wylew.activitystats.domain.SourceChoice
+import com.wylew.activitystats.domain.SourcePrefs
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.theme.ThemeSettings
 import com.wylew.activitystats.graph
@@ -46,13 +55,15 @@ import com.wylew.activitystats.widget.Widgets
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(padding: PaddingValues, onManageSources: () -> Unit) {
     val context = LocalContext.current
     val graph = context.graph
     val scope = rememberCoroutineScope()
     val connection by graph.settings.connection.collectAsState(Connection(false, null, null))
     val units by graph.settings.units.collectAsState(Units.IMPERIAL)
     val theme by graph.settings.theme.collectAsState(ThemeSettings())
+    val sources by graph.settings.sources.collectAsState(SourcePrefs())
+    val goals by graph.settings.goals.collectAsState(Goals())
     var hc by remember { mutableStateOf<HcStatus?>(null) }
     var hcBackground by remember { mutableStateOf(false) }
 
@@ -79,16 +90,45 @@ fun SettingsScreen(onBack: () -> Unit) {
         Column(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
+                .padding(padding)
         ) {
-            Row(Modifier.padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                Text("Settings", style = MaterialTheme.typography.titleLarge)
-            }
+            Text(
+                "Settings",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp),
+            )
 
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Data sources", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(
+                        onClick = onManageSources,
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(sources.choice.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (sources.choice == SourceChoice.BOTH) "Duplicates merged · ${sources.prefer.label.lowercase()}" else "Via Health Connect",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Change data sources")
+                        }
+                    }
+                }
+
+                GoalsSection(goals, units) { filter, meters ->
+                    scope.launch {
+                        graph.settings.setWeeklyGoal(filter, meters)
+                        Widgets.updateAll(context)
+                    }
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Health Connect", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     when (hc) {
@@ -191,6 +231,35 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                 }
 
+            }
+        }
+    }
+}
+
+/** Weekly distance goals; daily, monthly and yearly goals scale from these. */
+@Composable
+private fun GoalsSection(goals: Goals, units: Units, onChange: (ActivityFilter, Double) -> Unit) {
+    val unitM = if (units == Units.IMPERIAL) Goals.METERS_PER_MILE else 1000.0
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Weekly goals", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ActivityFilter.entries.forEach { f ->
+            val step = if (f == ActivityFilter.RUN) 1.0 else 5.0
+            val value = Math.round(goals.weekly(f) / unitM).toDouble()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(f.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                FilledTonalIconButton(
+                    onClick = { onChange(f, (value - step).coerceAtLeast(step) * unitM) },
+                ) { Icon(Icons.Filled.Remove, contentDescription = "Lower ${f.label} goal") }
+                Text(
+                    "${value.toInt()} ${Format.distanceUnit(units)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(72.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                FilledTonalIconButton(
+                    onClick = { onChange(f, (value + step) * unitM) },
+                ) { Icon(Icons.Filled.Add, contentDescription = "Raise ${f.label} goal") }
             }
         }
     }

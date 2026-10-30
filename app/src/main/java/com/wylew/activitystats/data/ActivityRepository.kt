@@ -6,11 +6,12 @@ import com.wylew.activitystats.data.strava.NotConnectedException
 import com.wylew.activitystats.data.strava.StravaApi
 import com.wylew.activitystats.data.strava.StravaAuth
 import com.wylew.activitystats.domain.Activity
-import com.wylew.activitystats.domain.Dedupe
+import com.wylew.activitystats.domain.ActivityView
+import com.wylew.activitystats.domain.SourceChoice
 import com.wylew.activitystats.domain.Source
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.time.Instant
@@ -39,10 +40,20 @@ class ActivityRepository(
 ) {
     private val syncLock = Mutex()
 
-    /** Every activity once, newest first. */
-    val activities: Flow<List<Activity>> = store.activities.map { Dedupe.apply(it) }
+    /** Everything cached, before source filtering and de-duplication. */
+    val raw: Flow<List<Activity>> = store.activities
 
-    suspend fun all(): List<Activity> = Dedupe.apply(store.all())
+    /** Activities from the chosen apps, each workout once, newest first. */
+    val activities: Flow<List<Activity>> = combine(store.activities, settings.sources) { all, prefs ->
+        ActivityView.apply(all, prefs)
+    }
+
+    /** Same, with a per-widget source override. */
+    fun activities(override: SourceChoice?): Flow<List<Activity>> =
+        combine(store.activities, settings.sources) { all, prefs -> ActivityView.apply(all, prefs, override) }
+
+    suspend fun all(override: SourceChoice? = null): List<Activity> =
+        ActivityView.apply(store.all(), settings.sources.first(), override)
 
     /**
      * @param background true from WorkManager. Health Connect only allows background reads

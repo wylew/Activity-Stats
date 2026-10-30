@@ -2,8 +2,17 @@
 
 An Android dashboard and home-screen widgets for your Garmin and Strava workouts, styled after Material 3 Expressive. Free: no accounts, API keys or subscriptions. It reads from Health Connect on your phone.
 
-- **Widgets:** one configurable roll-up widget. For each widget you choose the activity (**Run**, **Ride** or **All**), **Daily** or **Weekly**, the headline number (count, distance or time) and a color. At 2×2 it shows the headline number; at 4×2 and up it adds day bars (weekly) or today's list (daily). Colors follow your wallpaper (Material You).
-- **Dashboard:** Week / Month / Year roll-ups with a distance hero card, a comparison against the same point last period, moving time, pace, elevation, heart rate, a goal bar and recent activities.
+- **Widgets** (from the Rollup design), each configurable for **Run**, **Ride** or **All**, its color, and its data source (app default, Garmin only, Strava only):
+  - **Roll-up 4×2:** daily or weekly totals; headline count, distance or time; day bars or today's list.
+  - **Goal ring 2×2:** M3 Expressive wavy progress ring toward your daily or weekly goal.
+  - **Streak 2×2:** weeks in a row with an activity in a scalloped badge, plus the last 12 weeks.
+  - **Latest activity 4×1:** pill with your most recent workout and which app recorded it.
+- **App:** bottom navigation (Dashboard, Activities, Widgets, Settings).
+  - **Dashboard:** activity menu, Week / Month / Year connected button group, distance hero with day bars and a vs-last-period delta, stat tiles in expressive shapes, wavy goal bar, recent workouts, and a data-sources card showing merged duplicates.
+  - **Activities:** every workout grouped by week with weekly totals.
+  - **Widgets:** live previews of all four widgets with one-tap Add to home screen.
+  - **Settings:** data sources, weekly goals, theme, units, optional Strava API.
+- **First run:** "Where do your activities come from?" — Garmin Connect, Strava or Both, with setup steps and which copy wins for duplicates.
 - **Theming:** Settings → Theme. Pick System, Light or Dark, then either **Match wallpaper** (Material You) or **Pick your own colors**: two seed colors (primary and accent) generate full light and dark Material 3 schemes, with presets like Holiday (red + green). The app, system bars and widgets all follow it.
 - **Data:** Health Connect, which Garmin Connect and Strava both write to. When the same run arrives from both, it's counted once (the Garmin copy wins; a Strava title is kept). Refreshed hourly and on open. The Strava API is supported as an optional extra for people with a Strava subscription.
 
@@ -16,7 +25,7 @@ Design mockups live on the "Rollup" canvas in Claude.
    - **Garmin Connect:** More → Settings → Health Connect → allow.
    - **Strava:** You → Settings → Manage Apps and Devices → Health Connect.
 3. In Activity Stats, tap **Allow Health Connect access** and grant everything, including **past data** (for totals before today) and **background access** (so widgets update while the app is closed).
-4. Long-press the home screen → Widgets → Activity Stats → **Activity roll-up**.
+4. Open the **Widgets** tab and tap **Add**, or long-press the home screen → Widgets → Activity Stats. Long-press a placed widget and tap the pencil to change what it shows.
 
 Data stays on the phone. Activity Stats only reads from Health Connect.
 
@@ -67,7 +76,6 @@ Material 3 Expressive components (`MaterialExpressiveTheme`, `MaterialShapes`, w
 
 ## Roadmap
 
-- Setting to choose which copy wins when a run is in both Garmin and Strava
-- Editable goals, streak widget, 2×2 goal-ring widget
+- Activity detail screen with splits and a route map
 - Room database once Health Connect data arrives
 - Roboto Flex for wide, heavy stat numerals

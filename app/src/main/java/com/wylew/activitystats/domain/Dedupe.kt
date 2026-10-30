@@ -10,14 +10,15 @@ import kotlin.math.max
  * and a third time if the Strava API is connected. Two activities are the same workout when
  * they start within 2 minutes, are the same sport, and their distances are within 3%.
  *
- * The copy from the watch app wins for numbers; a Strava title is kept if the winner has none.
+ * The preferred app's copy wins for numbers (Garmin by default); a Strava title is kept if the
+ * winner only has a generic name.
  */
 object Dedupe {
     private const val START_TOLERANCE_SEC = 120
     private const val DISTANCE_TOLERANCE = 0.03
     private const val SHORT_DISTANCE_M = 200.0
 
-    fun apply(all: List<Activity>): List<Activity> {
+    fun apply(all: List<Activity>, prefer: String = "Garmin"): List<Activity> {
         if (all.size < 2) return all
         val kept = mutableListOf<Activity>()
         for (a in all.sortedBy { it.startEpochSec }) {
@@ -25,7 +26,7 @@ object Dedupe {
             if (i == -1) {
                 kept += a
             } else {
-                kept[i] = merge(kept[i], a)
+                kept[i] = merge(kept[i], a, prefer)
             }
         }
         return kept.sortedByDescending { it.startEpochSec }
@@ -40,8 +41,8 @@ object Dedupe {
         return abs(a.distanceM - b.distanceM) / longer <= DISTANCE_TOLERANCE
     }
 
-    private fun merge(x: Activity, y: Activity): Activity {
-        val (winner, loser) = if (rank(y) > rank(x)) y to x else x to y
+    private fun merge(x: Activity, y: Activity, prefer: String): Activity {
+        val (winner, loser) = if (rank(y, prefer) > rank(x, prefer)) y to x else x to y
         val name = when {
             loser.origin == "Strava" && loser.name.isNotBlank() && winner.name == winner.sportType -> loser.name
             else -> winner.name
@@ -54,10 +55,10 @@ object Dedupe {
         )
     }
 
-    /** Higher wins: the watch's own app, then other recorders, then Strava copies. */
-    private fun rank(a: Activity): Int = when (a.origin) {
-        "Garmin" -> 3
-        "Strava" -> 1
+    /** Higher wins: the preferred app, then other recorders, then the non-preferred of Garmin/Strava. */
+    private fun rank(a: Activity, prefer: String): Int = when (a.origin) {
+        prefer -> 3
+        "Garmin", "Strava" -> 1
         null -> 0
         else -> 2
     }

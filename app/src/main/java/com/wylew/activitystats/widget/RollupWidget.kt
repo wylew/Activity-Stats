@@ -2,29 +2,16 @@ package com.wylew.activitystats.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.Preferences
-import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
 import androidx.glance.LocalSize
-import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.action.actionStartActivity
-import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
-import androidx.glance.color.ColorProviders
-import androidx.glance.material3.ColorProviders as glanceColorProviders
-import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -35,23 +22,14 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import com.wylew.activitystats.MainActivity
 import com.wylew.activitystats.domain.Format
 import com.wylew.activitystats.domain.Rollup
 import com.wylew.activitystats.domain.RollupCalculator
 import com.wylew.activitystats.domain.Units
-import com.wylew.activitystats.graph
-import com.wylew.activitystats.theme.ColorSource
-import com.wylew.activitystats.theme.ThemeMode
-import com.wylew.activitystats.theme.ThemeSettings
-import com.wylew.activitystats.ui.theme.colorSchemeFor
-import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -62,39 +40,33 @@ class RollupWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = RollupWidget()
 }
 
-object Widgets {
-    suspend fun updateAll(context: Context) {
-        RollupWidget().updateAll(context)
-    }
-}
-
 /**
- * One configurable widget: Run / Ride / All, Daily or Weekly.
- * 2x2 shows the headline; 4x2 and wider adds day bars (weekly) or today's list (daily).
+ * 4×2 roll-up: Run / Ride / All, Daily or Weekly.
+ * Narrow sizes show the headline; wide ones add day bars (weekly) or today's list (daily).
  */
-class RollupWidget : GlanceAppWidget() {
+internal class RollupWidget : ActivityStatsWidget(WidgetKind.ROLLUP) {
 
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE))
 
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val graph = context.graph
-        val initialActivities = graph.repository.all()
-        val initialUnits = graph.settings.units.first()
-        val initialTheme = graph.settings.theme.first()
+    @Composable
+    override fun Content(context: Context, state: WidgetState) {
+        val s = state.settings
+        val r = RollupCalculator.compute(state.activities, s.filter, s.period.rollup, LocalDate.now(), ZoneId.systemDefault())
+        val p = state.palette
+        val wide = LocalSize.current.width >= WIDE.width
+        val h = headline(r, s, state.inputs.units)
 
-        provideContent {
-            val activities by graph.repository.activities.collectAsState(initialActivities)
-            val units by graph.settings.units.collectAsState(initialUnits)
-            val theme by graph.settings.theme.collectAsState(initialTheme)
-            val settings = WidgetPrefs.read(currentState<Preferences>())
-            val rollup = RollupCalculator.compute(
-                activities, settings.filter, settings.period.rollup, LocalDate.now(), ZoneId.systemDefault()
-            )
-            val colors = glanceColors(context, theme)
-            if (colors == null) {
-                GlanceTheme { WidgetContent(rollup, settings, units) }
+        WidgetFrame(p) {
+            if (wide) {
+                Row(GlanceModifier.fillMaxSize()) {
+                    Summary(h, p, big = 56, modifier = GlanceModifier.defaultWeight().fillMaxHeight())
+                    Spacer(GlanceModifier.width(12.dp))
+                    Box(GlanceModifier.defaultWeight().fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
+                        if (s.period == WidgetPeriod.WEEKLY) Bars(r, p) else TodayList(r, s, state.inputs.units, p)
+                    }
+                }
             } else {
-                GlanceTheme(colors = colors) { WidgetContent(rollup, settings, units) }
+                Summary(h, p, big = 44, modifier = GlanceModifier.fillMaxSize())
             }
         }
     }
@@ -105,110 +77,29 @@ class RollupWidget : GlanceAppWidget() {
     }
 }
 
-/**
- * Null means "use Glance's default", which is the wallpaper palette following system light/dark.
- * Otherwise we hand Glance explicit light and dark schemes; forcing a mode passes the same one twice.
- */
-private fun glanceColors(context: Context, t: ThemeSettings): ColorProviders? {
-    if (t.source == ColorSource.WALLPAPER && t.mode == ThemeMode.SYSTEM) return null
-    val light = colorSchemeFor(context, t, dark = false)
-    val dark = colorSchemeFor(context, t, dark = true)
-    return when (t.mode) {
-        ThemeMode.SYSTEM -> glanceColorProviders(light = light, dark = dark)
-        ThemeMode.LIGHT -> glanceColorProviders(light = light, dark = light)
-        ThemeMode.DARK -> glanceColorProviders(light = dark, dark = dark)
-    }
-}
-
-private data class Palette(
-    val bg: ColorProvider,
-    val fg: ColorProvider,
-    val sub: ColorProvider,
-    val accent: ColorProvider,
-    val bar: ColorProvider,
-    val current: ColorProvider,
-    val future: ColorProvider,
-    val chipBg: ColorProvider,
-    val chipFg: ColorProvider,
-    val row: ColorProvider,
-)
-
 @Composable
-private fun palette(color: WidgetColor): Palette {
-    val c = GlanceTheme.colors
-    return when (color) {
-        WidgetColor.NEUTRAL -> Palette(
-            bg = c.surface, fg = c.onSurface, sub = c.onSurfaceVariant, accent = c.primary,
-            bar = c.primary, current = c.tertiary, future = c.surfaceVariant,
-            chipBg = c.primaryContainer, chipFg = c.onPrimaryContainer, row = c.surfaceVariant,
-        )
-        WidgetColor.PRIMARY -> Palette(
-            bg = c.primary, fg = c.onPrimary, sub = c.onPrimary, accent = c.onPrimary,
-            bar = c.primaryContainer, current = c.tertiaryContainer, future = c.inversePrimary,
-            chipBg = c.primaryContainer, chipFg = c.onPrimaryContainer, row = c.inversePrimary,
-        )
-        WidgetColor.TERTIARY -> Palette(
-            bg = c.tertiaryContainer, fg = c.onTertiaryContainer, sub = c.onTertiaryContainer, accent = c.tertiary,
-            bar = c.tertiary, current = c.primary, future = c.surface,
-            chipBg = c.tertiary, chipFg = c.onTertiary, row = c.surface,
-        )
-    }
-}
-
-@Composable
-private fun WidgetContent(r: Rollup, s: WidgetSettings, units: Units) {
-    val p = palette(s.color)
-    val wide = LocalSize.current.width >= RollupWidget.WIDE.width
-    val h = headline(r, s, units)
-
-    Box(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .appWidgetBackground()
-            .background(p.bg)
-            .cornerRadius(android.R.dimen.system_app_widget_background_radius)
-            .clickable(actionStartActivity<MainActivity>())
-            .padding(16.dp),
-    ) {
-        if (wide) {
-            Row(GlanceModifier.fillMaxSize()) {
-                Summary(h, p, big = 52, modifier = GlanceModifier.defaultWeight().fillMaxHeight())
-                Spacer(GlanceModifier.width(12.dp))
-                Box(GlanceModifier.defaultWeight().fillMaxHeight(), contentAlignment = Alignment.BottomCenter) {
-                    if (s.period == WidgetPeriod.WEEKLY) Bars(r, p) else TodayList(r, s, units, p)
-                }
-            }
-        } else {
-            Summary(h, p, big = 44, modifier = GlanceModifier.fillMaxSize())
-        }
-    }
-}
-
-@Composable
-private fun Summary(h: Headline, p: Palette, big: Int, modifier: GlanceModifier) {
+private fun Summary(h: Headline, p: GlancePalette, big: Int, modifier: GlanceModifier) {
     Column(modifier) {
-        Box(GlanceModifier.background(p.chipBg).cornerRadius(14.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Text(h.chip, style = TextStyle(color = p.chipFg, fontSize = 12.sp, fontWeight = FontWeight.Medium), maxLines = 1)
-        }
+        Chip(h.chip, p)
         Spacer(GlanceModifier.defaultWeight())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(h.big, style = TextStyle(color = p.accent, fontSize = big.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             Spacer(GlanceModifier.width(4.dp))
             Text(
                 h.bigUnit,
-                style = TextStyle(color = p.fg, fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                modifier = GlanceModifier.padding(bottom = 8.dp),
+                style = TextStyle(color = p.fg, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                modifier = GlanceModifier.padding(bottom = 9.dp),
                 maxLines = 1,
             )
         }
-        Text(h.second, style = TextStyle(color = p.fg, fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+        Text(h.second, style = TextStyle(color = p.fg, fontSize = 20.sp, fontWeight = FontWeight.Bold), maxLines = 1)
     }
 }
 
 @Composable
-private fun Bars(r: Rollup, p: Palette) {
+private fun Bars(r: Rollup, p: GlancePalette) {
     val max = r.buckets.maxOfOrNull { it.distanceM }?.takeIf { it > 0 } ?: 1.0
-    Row(GlanceModifier.fillMaxWidth().height(108.dp), verticalAlignment = Alignment.Bottom) {
+    Row(GlanceModifier.fillMaxWidth().height(116.dp), verticalAlignment = Alignment.Bottom) {
         r.buckets.forEach { b ->
             Column(
                 GlanceModifier.defaultWeight().fillMaxHeight(),
@@ -216,13 +107,13 @@ private fun Bars(r: Rollup, p: Palette) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val (height, color) = when {
-                    b.isFuture -> 14 to p.future
-                    b.distanceM <= 0.0 -> 6 to p.future
-                    else -> maxOf(10, (b.distanceM / max * 80).toInt()) to (if (b.isCurrent) p.current else p.bar)
+                    b.isFuture -> 18 to p.future
+                    b.distanceM <= 0.0 -> 8 to p.future
+                    else -> maxOf(12, (b.distanceM / max * 88).toInt()) to (if (b.isCurrent) p.current else p.bar)
                 }
-                val width = if (b.isFuture || b.distanceM > 0.0) 14 else 6
-                Box(GlanceModifier.width(width.dp).height(height.dp).cornerRadius(7.dp).background(color)) {}
-                Spacer(GlanceModifier.height(4.dp))
+                val width = if (b.distanceM > 0.0 || b.isFuture) 18 else 8
+                Box(GlanceModifier.width(width.dp).height(height.dp).cornerRadius(9.dp).background(color)) {}
+                Spacer(GlanceModifier.height(6.dp))
                 Text(
                     b.label,
                     style = TextStyle(
@@ -237,7 +128,7 @@ private fun Bars(r: Rollup, p: Palette) {
 }
 
 @Composable
-private fun TodayList(r: Rollup, s: WidgetSettings, units: Units, p: Palette) {
+private fun TodayList(r: Rollup, s: WidgetSettings, units: Units, p: GlancePalette) {
     val zone = ZoneId.systemDefault()
     val timeFmt = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     Column(GlanceModifier.fillMaxWidth()) {

@@ -4,16 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import com.wylew.activitystats.ui.dashboard.DashboardScreen
-import com.wylew.activitystats.ui.settings.SettingsScreen
+import com.wylew.activitystats.ui.AppRoot
 import com.wylew.activitystats.ui.theme.ActivityStatsTheme
 import com.wylew.activitystats.widget.Widgets
 import kotlinx.coroutines.launch
@@ -26,13 +20,7 @@ class MainActivity : ComponentActivity() {
         handleOAuthRedirect(intent)
         setContent {
             ActivityStatsTheme {
-                var showSettings by rememberSaveable { mutableStateOf(false) }
-                BackHandler(enabled = showSettings) { showSettings = false }
-                if (showSettings) {
-                    SettingsScreen(onBack = { showSettings = false })
-                } else {
-                    DashboardScreen(onOpenSettings = { showSettings = true })
-                }
+                AppRoot()
             }
         }
     }

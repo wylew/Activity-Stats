@@ -2,11 +2,18 @@ package com.wylew.activitystats.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wylew.activitystats.domain.ActivityFilter
+import com.wylew.activitystats.domain.Goals
+import com.wylew.activitystats.domain.PreferOrigin
+import com.wylew.activitystats.domain.SourceChoice
+import com.wylew.activitystats.domain.SourcePrefs
 import com.wylew.activitystats.domain.Units
 import com.wylew.activitystats.theme.ColorSource
 import com.wylew.activitystats.theme.ThemeMode
@@ -60,6 +67,46 @@ class SettingsStore(private val context: Context) {
         )
     }.distinctUntilChanged()
 
+    val sources: Flow<SourcePrefs> = data.map { p ->
+        val d = SourcePrefs()
+        SourcePrefs(
+            choice = p[SOURCE_CHOICE]?.let { v -> SourceChoice.entries.firstOrNull { it.name == v } } ?: d.choice,
+            prefer = p[PREFER_ORIGIN]?.let { v -> PreferOrigin.entries.firstOrNull { it.name == v } } ?: d.prefer,
+        )
+    }.distinctUntilChanged()
+
+    suspend fun setSources(s: SourcePrefs) {
+        context.dataStore.edit {
+            it[SOURCE_CHOICE] = s.choice.name
+            it[PREFER_ORIGIN] = s.prefer.name
+        }
+    }
+
+    /** False until the first-run "Where do your activities come from?" screen is done. */
+    val onboarded: Flow<Boolean> = data.map { it[ONBOARDED] ?: false }.distinctUntilChanged()
+
+    suspend fun setOnboarded() {
+        context.dataStore.edit { it[ONBOARDED] = true }
+    }
+
+    val goals: Flow<Goals> = data.map { p ->
+        val d = Goals()
+        Goals(
+            runWeeklyM = p[GOAL_RUN] ?: d.runWeeklyM,
+            rideWeeklyM = p[GOAL_RIDE] ?: d.rideWeeklyM,
+            allWeeklyM = p[GOAL_ALL] ?: d.allWeeklyM,
+        )
+    }.distinctUntilChanged()
+
+    suspend fun setWeeklyGoal(filter: ActivityFilter, meters: Double) {
+        val key = when (filter) {
+            ActivityFilter.RUN -> GOAL_RUN
+            ActivityFilter.RIDE -> GOAL_RIDE
+            ActivityFilter.ALL -> GOAL_ALL
+        }
+        context.dataStore.edit { it[key] = meters }
+    }
+
     suspend fun setTheme(t: ThemeSettings) {
         context.dataStore.edit {
             it[THEME_MODE] = t.mode.name
@@ -103,6 +150,12 @@ class SettingsStore(private val context: Context) {
         val LAST_SYNC = longPreferencesKey("last_sync_ms")
         val UNITS = stringPreferencesKey("units")
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        val SOURCE_CHOICE = stringPreferencesKey("source_choice")
+        val PREFER_ORIGIN = stringPreferencesKey("prefer_origin")
+        val ONBOARDED = booleanPreferencesKey("onboarded")
+        val GOAL_RUN = doublePreferencesKey("goal_run_weekly_m")
+        val GOAL_RIDE = doublePreferencesKey("goal_ride_weekly_m")
+        val GOAL_ALL = doublePreferencesKey("goal_all_weekly_m")
         val COLOR_SOURCE = stringPreferencesKey("color_source")
         val SEED_PRIMARY = intPreferencesKey("seed_primary")
         val SEED_ACCENT = intPreferencesKey("seed_accent")
