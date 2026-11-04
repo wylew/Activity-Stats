@@ -9,6 +9,7 @@ An Android dashboard and home-screen widgets for your Garmin and Strava workouts
 | Widget | Styles | Options |
 |---|---|---|
 | **Totals** (4×2, resizable) | **Bars** (headline + day or week bars, or today's list) · **Badge** (number in a scalloped badge with a dot per day or week) · **Big number** | Daily, Weekly or Monthly; count, distance or time |
+| **Weekly totals** (2×2; resizes to one row, or tall 2×4) | **Bars** (a bar per day) · **Badge** (scalloped badge, a dot per day) · **Big number** | Monday to Sunday; count, distance or time. One row high it's the total then its unit, with day markers once wider than 2 cells; tall, the days are spelled out down the left |
 | **Streak** (2×2) | **Badge** (count + last 12 weeks as dots) · **Calendar** (12 weeks as a grid) · **Big number** | |
 | **Latest activity** (4×1) | **Pill** · **Card** (distance, time, pace, heart rate) · **Compact** | |
 
@@ -19,6 +20,8 @@ Totals are plain totals; there are no goals.
 - **Activities:** every workout grouped by week with weekly totals.
 - **Widgets:** live previews of every widget in each style, with one-tap Add to home screen (adds the style you're previewing).
 - **Settings:** Health Connect status, theme (light/dark/system; wallpaper colors or two custom seed colors), units.
+
+**Syncing.** Every hour in the background, and each time you open the app.
 
 **Duplicates.** Garmin Connect and Strava both write the same run to Health Connect. Activity Stats counts it once (start within 2 min, same sport, distance within 3%), keeps the Garmin numbers and carries over the Strava title.
 
@@ -46,7 +49,7 @@ app/src/main/java/com/wylew/activitystats/
   theme/              ColorScience (CIELAB tonal palettes), SchemeGenerator (two seeds → M3 roles), ThemeSettings
   ui/                 AppRoot (tabs), dashboard/, activities/, widgets/ (gallery), settings/, widgetconfig/ (setup + previews)
   ui/components/      CookieShape, RollupBars, ConnectedButtonGroup, ActivityRow
-  widget/             Glance widgets (Totals, Streak, Latest), shared palette, per-widget settings
+  widget/             Glance widgets (Totals, Weekly totals, Streak, Latest), shared palette, per-widget settings
 ```
 
 ## Toolchain

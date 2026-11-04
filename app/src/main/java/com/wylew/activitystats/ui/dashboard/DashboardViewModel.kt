@@ -72,7 +72,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             refreshSourcesNow()
-            if (hcStatus.value == HcStatus.READY) sync()
         }
     }
 

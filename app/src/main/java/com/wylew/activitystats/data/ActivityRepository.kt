@@ -29,6 +29,7 @@ class ActivityRepository(
     private val settings: SettingsStore,
 ) {
     private val syncLock = Mutex()
+    @Volatile private var lastAttemptMs = 0L
 
     /** Everything cached, before duplicates are merged. */
     val raw: Flow<List<Activity>> = store.activities
@@ -46,6 +47,7 @@ class ActivityRepository(
      *   when "Access data in the background" is granted, so we skip otherwise.
      */
     suspend fun sync(background: Boolean = false): SyncResult = syncLock.withLock {
+        lastAttemptMs = System.currentTimeMillis()
         if (healthConnect.status() != HcStatus.READY) return@withLock SyncResult.NotConnected
         if (background && !healthConnect.canReadInBackground()) return@withLock SyncResult.NotConnected
         try {
@@ -62,7 +64,17 @@ class ActivityRepository(
         }
     }
 
+    /** Sync on opening the app, unless one ran in the last couple of minutes. Null when skipped. */
+    suspend fun syncIfStale(): SyncResult? {
+        if (System.currentTimeMillis() - lastAttemptMs < OPEN_SYNC_GAP_MS) return null
+        return sync()
+    }
+
     private fun backfillStartSec(): Long =
         LocalDate.now().minusYears(1).withDayOfYear(1)
             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond()
+
+    private companion object {
+        const val OPEN_SYNC_GAP_MS = 2 * 60_000L
+    }
 }
