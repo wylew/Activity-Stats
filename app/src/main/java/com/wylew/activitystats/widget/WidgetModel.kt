@@ -15,6 +15,10 @@ enum class WidgetKind(val title: String, val description: String, val size: Stri
         "Totals", "Daily, weekly or monthly runs, rides or everything", "4×2",
         listOf(WidgetStyle.BARS, WidgetStyle.BADGE, WidgetStyle.NUMBER),
     ),
+    WEEKLY(
+        "Weekly totals", "This week's runs, rides or everything. Resize to one row for a slim version", "2×2",
+        listOf(WidgetStyle.BARS, WidgetStyle.BADGE, WidgetStyle.NUMBER),
+    ),
     STREAK(
         "Streak", "Weeks in a row with an activity", "2×2",
         listOf(WidgetStyle.BADGE, WidgetStyle.CALENDAR, WidgetStyle.NUMBER),
@@ -25,7 +29,7 @@ enum class WidgetKind(val title: String, val description: String, val size: Stri
     );
 
     val usesPeriod: Boolean get() = this == TOTALS
-    val usesMetric: Boolean get() = this == TOTALS
+    val usesMetric: Boolean get() = this == TOTALS || this == WEEKLY
 }
 
 enum class WidgetStyle(val label: String) {
@@ -86,7 +90,7 @@ object WidgetPrefs {
         return WidgetSettings(
             style = style,
             filter = p[FILTER].toEnum(d.filter),
-            period = p[PERIOD].toEnum(d.period),
+            period = if (kind == WidgetKind.WEEKLY) WidgetPeriod.WEEKLY else p[PERIOD].toEnum(d.period),
             metric = p[METRIC].toEnum(d.metric),
             color = p[COLOR].toEnum(d.color),
         )

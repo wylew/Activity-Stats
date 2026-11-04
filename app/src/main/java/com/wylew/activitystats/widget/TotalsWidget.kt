@@ -62,6 +62,7 @@ internal class TotalsWidget : ActivityStatsWidget(WidgetKind.TOTALS) {
         val h = headline(r, s, state.inputs.units)
         val p = state.palette
         val wide = LocalSize.current.width >= WIDE.width
+        if (!wide && s.period == WidgetPeriod.WEEKLY) return WeeklyContent(context, r, s, h, p)
         when (s.style) {
             WidgetStyle.BADGE -> BadgeTotals(context, r, s, h, p, wide)
             WidgetStyle.NUMBER -> NumberTotals(s, h, p, wide)

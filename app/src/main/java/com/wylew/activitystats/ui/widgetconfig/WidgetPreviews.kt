@@ -65,6 +65,10 @@ private val TALL = 184.dp
 fun WidgetPreview(kind: WidgetKind, s: WidgetSettings, activities: List<Activity>, units: Units) {
     val p = MaterialTheme.colorScheme.widgetPalette(s.color)
     when (kind) {
+        WidgetKind.WEEKLY -> {
+            val r = RollupCalculator.compute(activities, s.filter, s.period.rollup, LocalDate.now(), ZoneId.systemDefault())
+            WeeklyCard(p, headline(r, s, units), s, r)
+        }
         WidgetKind.TOTALS -> {
             val r = RollupCalculator.compute(activities, s.filter, s.period.rollup, LocalDate.now(), ZoneId.systemDefault())
             val h = headline(r, s, units)
@@ -214,6 +218,57 @@ private fun BarsCard(p: WidgetPalette, h: Headline, s: WidgetSettings, r: Rollup
                             Spacer(Modifier.weight(1f))
                             Text(Instant.ofEpochSecond(a.startEpochSec).atZone(ZoneId.systemDefault()).toLocalTime().format(fmt), color = p.sub, fontSize = 12.sp)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyCard(p: WidgetPalette, h: Headline, s: WidgetSettings, r: Rollup) {
+    BadgeCard(p, padding = 14.dp) {
+        if (s.style != WidgetStyle.BADGE) Spacer(Modifier.weight(1f))
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (s.style == WidgetStyle.BADGE) {
+                // Scaled down with the preview card, which is smaller than the real 2×2.
+                val badgeText = if (h.big.length > 4) h.big.substringBefore('.') else h.big
+                Box(Modifier.size(104.dp).background(p.accent, CookieShape()), contentAlignment = Alignment.Center) {
+                    Text(badgeText, color = p.bg, fontSize = 37.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(h.caption, color = p.fg, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            } else {
+                BigNumber(h, p, if (s.style == WidgetStyle.NUMBER) 64 else 48)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(iconFor(s.filter)), null, tint = p.sub, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("${h.second} ${s.period.phrase}", color = p.sub, fontSize = 12.sp, maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (s.style != WidgetStyle.NUMBER) {
+            val max = r.buckets.maxOfOrNull { it.distanceM }?.takeIf { it > 0 } ?: 1.0
+            Row(Modifier.fillMaxWidth()) {
+                r.buckets.forEach { b ->
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (s.style == WidgetStyle.BADGE) {
+                            val color = if (b.count > 0) (if (b.isCurrent) p.current else p.fg) else p.future
+                            Box(Modifier.size(12.dp).background(color, RoundedCornerShape(6.dp)))
+                        } else {
+                            Box(Modifier.width(12.dp).height(30.dp).background(p.future, RoundedCornerShape(6.dp)), contentAlignment = Alignment.BottomCenter) {
+                                if (b.distanceM > 0.0) {
+                                    val fill = maxOf(8, (b.distanceM / max * 30).toInt())
+                                    Box(Modifier.width(12.dp).height(fill.dp).background(if (b.isCurrent) p.current else p.bar, RoundedCornerShape(6.dp)))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            b.label, color = if (b.isCurrent) p.fg else p.sub, fontSize = 10.sp,
+                            fontWeight = if (b.isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        )
                     }
                 }
             }

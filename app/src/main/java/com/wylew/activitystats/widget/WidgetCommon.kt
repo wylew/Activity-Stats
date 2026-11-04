@@ -60,23 +60,27 @@ object Widgets {
     /** Redraw every widget, e.g. after a sync or a settings change. */
     suspend fun updateAll(context: Context) {
         TotalsWidget().updateAll(context)
+        WeeklyWidget().updateAll(context)
         StreakWidget().updateAll(context)
         LatestWidget().updateAll(context)
     }
 
     fun widgetFor(kind: WidgetKind): GlanceAppWidget = when (kind) {
         WidgetKind.TOTALS -> TotalsWidget()
+        WidgetKind.WEEKLY -> WeeklyWidget()
         WidgetKind.STREAK -> StreakWidget()
         WidgetKind.LATEST -> LatestWidget()
     }
 
     fun receiverFor(kind: WidgetKind): Class<*> = when (kind) {
         WidgetKind.TOTALS -> TotalsWidgetReceiver::class.java
+        WidgetKind.WEEKLY -> WeeklyWidgetReceiver::class.java
         WidgetKind.STREAK -> StreakWidgetReceiver::class.java
         WidgetKind.LATEST -> LatestWidgetReceiver::class.java
     }
 
     fun kindOfReceiver(className: String?): WidgetKind = when (className) {
+        WeeklyWidgetReceiver::class.java.name -> WidgetKind.WEEKLY
         StreakWidgetReceiver::class.java.name -> WidgetKind.STREAK
         LatestWidgetReceiver::class.java.name -> WidgetKind.LATEST
         else -> WidgetKind.TOTALS

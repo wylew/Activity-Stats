@@ -84,7 +84,7 @@ fun WidgetsScreen(padding: PaddingValues) {
                             FilledTonalButton(onClick = { pin(context, kind, style) }) { Text("Add") }
                         }
                     }
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    if (kind.styles.size > 1) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         kind.styles.forEachIndexed { i, st ->
                             SegmentedButton(
                                 selected = style == st,

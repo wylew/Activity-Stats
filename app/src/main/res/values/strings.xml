@@ -2,6 +2,8 @@
     <string name="app_name">Activity Stats</string>
     <string name="widget_name">Totals</string>
     <string name="widget_description">Daily, weekly or monthly totals for runs, rides or everything</string>
+    <string name="weekly_widget_name">Weekly totals</string>
+    <string name="weekly_widget_description">This week\'s runs, rides or everything. Resize to one row for a slim version</string>
     <string name="streak_widget_name">Streak</string>
     <string name="streak_widget_description">Weeks in a row with a run, ride or any activity</string>
     <string name="latest_widget_name">Latest activity</string>

@@ -103,7 +103,7 @@ fun WidgetConfigScreen(
             }
 
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                Section("Style") {
+                if (kind.styles.size > 1) Section("Style") {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         kind.styles.forEachIndexed { i, style ->
                             SegmentedButton(
